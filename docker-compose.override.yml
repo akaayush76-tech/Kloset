@@ -1,0 +1,51 @@
+services:
+  api:
+    # Use docker-compose up --profile dev to enable hot-reload with air
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      cache_from:
+        - golang:1.21-alpine
+    environment:
+      ENV: development
+      LOG_LEVEL: debug
+      GIN_MODE: debug
+    volumes:
+      - .:/app
+      - /app/bin
+    ports:
+      - "8080:8080"
+
+  # Optional: Add Adminer as a simpler MongoDB UI alternative
+  adminer:
+    image: adminer
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    depends_on:
+      - mongodb
+    networks:
+      - kloset-network
+    profiles:
+      - dev
+
+  # Optional: Redis for caching (uncomment to enable)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: kloset-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - kloset-network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  redis_data:
+    driver: local

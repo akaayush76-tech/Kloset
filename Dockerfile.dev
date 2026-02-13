@@ -1,0 +1,72 @@
+# Development Dockerfile with hot-reload support using air
+FROM golang:1.21-alpine
+
+# Install necessary tools
+RUN apk add --no-cache git ca-certificates tzdata wget
+
+# Install air for hot-reload
+RUN go install github.com/cosmtrek/air@latest
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Create .air.toml config
+RUN echo 'root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+[build]
+  args_bin = []
+  bin = "./tmp/main"
+  cmd = "go build -o ./tmp/main ./cmd/server"
+  delay = 1000
+  exclude = ["*.json"]
+  exclude_dir = ["assets", "tmp", "vendor", "testdata"]
+  exclude_file = []
+  exclude_regex = ["_test.go"]
+  exclude_suffix = ["_test.go"]
+  exclude_extensions = ["so", "o", "a", "exe", "dll", "dylib", "tmp"]
+  full_bin = ""
+  full_delay = 0
+  include_dir = []
+  include_extensions = ["go", "tpl", "tmpl", "html"]
+  include_file = []
+  include_regex = []
+  kill_delay = "0s"
+  log = "build-errors.log"
+  poll = false
+  poll_interval = 0
+  rerun = false
+  rerun_delay = 500
+  send_interrupt = false
+  stop_on_error = false
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  main_only = false
+  time = false
+
+[misc]
+  clean_on_exit = false
+
+[screen]
+  clear_on_rebuild = false
+  keep_scroll = true' > .air.toml
+
+# Expose port
+EXPOSE 8080
+
+# Run air for hot-reload
+CMD ["air", "-c", ".air.toml"]
