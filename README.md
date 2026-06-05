@@ -4,7 +4,7 @@ Complete Go backend reimplementation of Fittingly e-commerce API with 100% API c
 
 ## Project Status
 
-**Implementation Progress: 126/153 tasks (82%)**
+**Implementation Progress: 127/154 tasks (83%)**
 
 ### Completed Phases
 - ✅ Phase 1: Project Setup & Dependencies (6/6)
@@ -21,8 +21,9 @@ Complete Go backend reimplementation of Fittingly e-commerce API with 100% API c
 - ✅ Phase 12: Pagination (9/9)
 - ✅ Phase 13: API Response Formatting (11/11)
 - ✅ Phase 14: Error Handling (9/9)
-- ⏳ Phase 15: Integration & Testing (14/14) - Ready for testing
-- ⏳ Phase 16: Deployment & Documentation (12/12) - Ready
+- ✅ Phase 15: Outfit Recommendation Engine (1/1)
+- ⏳ Phase 16: Integration & Testing (14/14) - Ready for testing
+- ⏳ Phase 17: Deployment & Documentation (12/12) - Ready
 
 ## Architecture
 
@@ -33,6 +34,7 @@ Complete Go backend reimplementation of Fittingly e-commerce API with 100% API c
 - **Password Hashing**: bcrypt (salt rounds 12)
 - **Image Storage**: Cloudinary
 - **Rate Limiting**: In-memory store (15-min window, 100 req/IP)
+- **Recommendation Cache**: In-memory TTL cache (5-min window, sync.Map)
 - **Security**: CORS, Helmet-like headers, HTTPS-ready
 
 ### Project Structure
@@ -42,9 +44,16 @@ Complete Go backend reimplementation of Fittingly e-commerce API with 100% API c
 │   └── server/
 │       └── main.go              # Server entry point
 ├── internal/
+│   ├── cache/
+│   │   └── recommendation_cache.go  # In-memory TTL cache (sync.Map)
 │   ├── config/
 │   │   ├── database.go          # MongoDB connection
 │   │   └── cloudinary.go        # Cloudinary setup
+│   ├── engine/
+│   │   ├── color_matrix.go      # Color-pair harmony lookup table
+│   │   ├── prefilter.go         # Hard-block combination rules
+│   │   ├── recommender.go       # Recommendation orchestrator
+│   │   └── scorer.go            # Weighted scoring algorithm
 │   ├── handlers/
 │   │   ├── auth.go              # Authentication endpoints
 │   │   ├── profile.go           # Profile management
@@ -52,6 +61,7 @@ Complete Go backend reimplementation of Fittingly e-commerce API with 100% API c
 │   │   ├── products_update.go   # Product updates
 │   │   ├── cart.go              # Shopping cart
 │   │   ├── orders.go            # Order management
+│   │   ├── recommendations.go   # Outfit recommendations
 │   │   ├── reviews.go           # Product reviews
 │   │   ├── wardrobe.go          # Virtual wardrobe
 │   │   └── upload.go            # Image uploads
@@ -60,6 +70,7 @@ Complete Go backend reimplementation of Fittingly e-commerce API with 100% API c
 │   │   ├── security.go          # Security headers
 │   │   └── ratelimit.go         # Rate limiting
 │   ├── models/
+│   │   ├── identifiers.go       # 8-dimension item identifier struct
 │   │   ├── user.go              # User model
 │   │   ├── product.go           # Product model
 │   │   ├── order.go             # Order model
@@ -71,10 +82,12 @@ Complete Go backend reimplementation of Fittingly e-commerce API with 100% API c
 │       ├── response.go          # API responses
 │       ├── validation.go        # Input validation
 │       └── auth.go              # Auth utilities
+├── scripts/
+│   ├── init-mongo.js            # MongoDB init (collections, indexes, seed data)
+│   └── seed_and_test.sh         # Seed 12 wardrobe items + test recommendations
 ├── .env.development             # Development config
 ├── .env.production              # Production config
 └── go.mod                       # Go modules
-
 ```
 
 ## Setup
@@ -162,6 +175,68 @@ go build -o bin/server ./cmd/server
 - `PUT /api/wardrobe/:id` - Update item (requires auth)
 - `DELETE /api/wardrobe/:id` - Delete item (requires auth)
 
+### Outfit Recommendations
+- `POST /api/recommendations/outfits` - Generate outfit combinations for a trigger item (requires auth)
+
+#### Request body
+```json
+{
+  "trigger_item_id":   "string",   // MongoDB ID of the item to build outfits around
+  "trigger_item_type": "closet",   // "closet" | "catalog"
+  "context_filter":    "casual",   // "all" | "casual" | "smart_casual" | "date_night" | "weekend"
+  "limit":             5,          // 1–10, default 8
+  "include_shop_items": true       // suggest catalog items to fill missing slots
+}
+```
+
+#### Response shape
+```json
+{
+  "success": true,
+  "message": "Outfit recommendations retrieved",
+  "data": {
+    "outfits": [
+      {
+        "outfit_id": "string",
+        "rank": 1,
+        "score": 94,
+        "rank_label": "Best match",
+        "items": [
+          {
+            "item_id": "string",
+            "name": "White Slim Tee",
+            "brand": "Basics Co",
+            "category": "upper",
+            "image_url": "https://...",
+            "is_trigger": true,
+            "owned": true,
+            "price": 499,
+            "identifiers": { "colorPrimary": "white", "fit": "slim", "occasion": "casual", "..." : "..." }
+          }
+        ],
+        "score_breakdown": {
+          "color_harmony": 0.98,
+          "fit_compat": 0.90,
+          "occasion_match": 1.0,
+          "season_match": 1.0
+        },
+        "why_text": "white + navy is a high-contrast combination that always works.",
+        "rule_tags": ["Color: white + navy", "Fit: slim + slim", "Occasion: casual"],
+        "missing_items": []
+      }
+    ],
+    "meta": {
+      "trigger_item_id": "string",
+      "closet_items_considered": 12,
+      "combinations_evaluated": 48,
+      "combinations_after_filters": 18,
+      "returned": 5,
+      "latency_ms": 23
+    }
+  }
+}
+```
+
 ### Image Upload
 - `POST /api/upload/image` - Upload single image (requires auth)
 - `POST /api/upload/images` - Upload multiple images (requires auth)
@@ -212,7 +287,20 @@ go build -o bin/server ./cmd/server
 - **Pincode**: Exactly 6 digits (Indian format)
 - **Rating**: 1-5 integer
 - **Comment**: 10-500 characters
-- **Category**: upper, lower, shoes
+- **Category**: `upper`, `lower`, `shoes`, `outerwear`, `full_body`, `accessory`
+
+### Item Identifier Enums (Recommendation Engine)
+
+| Field | Allowed values |
+|-------|---------------|
+| `colorPrimary` | `white` `black` `navy` `beige` `grey` `brown` `red` `green` `blue` `yellow` `pink` `purple` `orange` `multicolor` |
+| `colorTone` | `neutral` `pastel` `neon` `earth` `bold` |
+| `fit` | `slim` `regular` `oversized` `relaxed` |
+| `occasion` | `casual` `smart_casual` `date_night` `weekend` `all` |
+| `season` | `spring` `summer` `fall` `winter` `all` |
+| `formality` | `casual` `smart_casual` `formal` |
+| `style` | `streetwear` `classic` `bohemian` `minimalist` |
+| `pattern` | `solid` `stripes` `checks` `floral` `graphic` |
 
 ## HTTP Status Codes
 
@@ -272,13 +360,28 @@ curl -X GET "http://localhost:8080/api/products?page=1&limit=10&category=upper"
 
 ## Development Notes
 
+### Recommendation Engine
+
+The engine lives in `internal/engine/` and runs entirely in-process (no microservice). When `POST /api/recommendations/outfits` is called:
+
+1. **Cache check** — returns immediately on a hit (key: `rec:{userID}:{triggerID}:{contextFilter}`, TTL 5 min).
+2. **Fetch** — loads the trigger item (catalog or closet) and all active closet items for the user.
+3. **Pre-filter** (hard blocks) — discards combinations that violate: same outfit slot, full-body + top/bottom conflict, summer↔winter season clash, casual↔formal formality gap.
+4. **Combination generation** — builds trigger + required complement + optional outerwear / footwear / accessory sets (capped at 5 candidates per optional slot).
+5. **Scoring** — each combination receives a 0–100 score: color harmony (35%), fit compatibility (25%), occasion match (25%), season match (15%).
+6. **Deduplication** — keeps only the highest-scoring combo per top+bottom pair.
+7. **Shop-to-complete** — when `include_shop_items: true`, queries the catalog to suggest products for missing slots.
+8. **Cache write** — stores the result before returning.
+
+Score labels: ≥90 → *Best match*, ≥75 → *Great match*, ≥60 → *Good match*, <60 → *Fair match*.
+
 ### Database Indexes
-All indexes are automatically created via `models.go` index functions:
+All indexes are automatically created via `models/indexes.go` at startup:
 - User: email (unique), createdAt
 - Product: text search, category+subcategory, price, rating
 - Order: user+createdAt, orderStatus, paymentStatus, trackingNumber
 - Review: user+product (unique), product+createdAt, rating
-- WardrobeItem: user+category, user+subtype, user+createdAt
+- WardrobeItem: user+category, user+subtype, user+createdAt, **user+isActive+identifiers.occasion** (recommendation engine)
 
 ### Rate Limiting
 - 15-minute sliding window
@@ -297,20 +400,13 @@ All indexes are automatically created via `models.go` index functions:
 
 ## Deployment
 
-### Docker (TODO)
-```dockerfile
-FROM golang:1.21 as builder
-WORKDIR /app
-COPY . .
-RUN go build -o server ./cmd/server
-
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-COPY --from=builder /app/server .
-EXPOSE 8080
-CMD ["./server"]
+### Docker (recommended)
+```bash
+docker compose up -d   # starts MongoDB + API + Mongo Express UI (port 8081)
 ```
+
+Multi-stage `Dockerfile` produces a minimal Alpine image running as non-root `appuser:1000`.
+`Dockerfile.dev` is a single-stage build for local development.
 
 ### Environment Variables
 ```
@@ -333,6 +429,7 @@ CORS_ORIGIN=https://yourdomain.com
 - Rate limiting to prevent abuse
 - Gzip compression for responses
 - Response time headers for monitoring
+- Recommendation results cached in-memory for 5 minutes per user+trigger+context
 
 ## Security Features
 
@@ -358,13 +455,13 @@ CORS_ORIGIN=https://yourdomain.com
 - [ ] Admin role system
 - [ ] Token blacklist/refresh tokens
 - [ ] Elasticsearch for full-text search
-- [ ] Redis caching layer
+- [ ] Redis to replace in-memory recommendation cache (for multi-instance deployments)
 - [ ] GraphQL API alongside REST
 - [ ] Websocket for real-time updates
 - [ ] Email notifications
 - [ ] Analytics & reporting
 - [ ] Payment gateway integration
-- [ ] Recommendation engine
+- [ ] Catalog-based recommendations using behavioral signals (collaborative filtering)
 - [ ] Search analytics
 
 ## License
