@@ -130,6 +130,13 @@ func main() {
 		wardrobeGroup.DELETE("/:id", handlers.DeleteWardrobeItemHandler)
 	}
 
+	// Recommendation routes
+	recGroup := router.Group("/api/recommendations")
+	recGroup.Use(middleware.AuthMiddleware)
+	{
+		recGroup.POST("/outfits", handlers.RecommendOutfitsHandler)
+	}
+
 	// Upload routes
 	uploadGroup := router.Group("/api/upload")
 	{

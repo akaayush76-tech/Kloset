@@ -190,5 +190,14 @@ func CreateWardrobeItemIndexes(ctx context.Context, db *mongo.Database) error {
 		Keys: map[string]int{"userId": 1, "createdAt": -1},
 	}
 	_, err = collection.Indexes().CreateOne(ctx, userCreatedIndex)
+	if err != nil {
+		return err
+	}
+
+	// Compound index for recommendation engine: user + isActive + occasion
+	recIndex := mongo.IndexModel{
+		Keys: map[string]interface{}{"userId": 1, "isActive": 1, "identifiers.occasion": 1},
+	}
+	_, err = collection.Indexes().CreateOne(ctx, recIndex)
 	return err
 }

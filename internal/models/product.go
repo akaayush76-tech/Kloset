@@ -28,7 +28,8 @@ type Product struct {
 	DeliveryCharge    float64 `bson:"deliveryCharge" json:"deliveryCharge"`
 	FreeDeliveryAbove float64 `bson:"freeDeliveryAbove" json:"freeDeliveryAbove"`
 
-	IsActive  bool      `bson:"isActive" json:"isActive"`
-	CreatedAt time.Time `bson:"createdAt" json:"createdAt"`
-	UpdatedAt time.Time `bson:"updatedAt" json:"updatedAt"`
+	Identifiers ItemIdentifiers `bson:"identifiers" json:"identifiers"`
+	IsActive    bool            `bson:"isActive" json:"isActive"`
+	CreatedAt   time.Time       `bson:"createdAt" json:"createdAt"`
+	UpdatedAt   time.Time       `bson:"updatedAt" json:"updatedAt"`
 }
