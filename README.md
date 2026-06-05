@@ -367,14 +367,3 @@ CORS_ORIGIN=https://yourdomain.com
 - [ ] Recommendation engine
 - [ ] Search analytics
 
-## License
-
-Proprietary - Fittingly/Kloset
-
-## Support
-
-For issues or questions, refer to the OpenSpec artifacts:
-- `/openspec/changes/implement-fittingly-go-apis/proposal.md`
-- `/openspec/changes/implement-fittingly-go-apis/design.md`
-- `/openspec/changes/implement-fittingly-go-apis/tasks.md`
-- `/openspec/changes/implement-fittingly-go-apis/specs/*/spec.md`
