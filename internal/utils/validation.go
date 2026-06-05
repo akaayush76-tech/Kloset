@@ -96,13 +96,75 @@ func RatingValidator(rating int) bool {
 
 // CategoryValidator validates category enum
 func CategoryValidator(category string) bool {
-	validCategories := []string{"upper", "lower", "shoes"}
+	validCategories := []string{"upper", "lower", "shoes", "outerwear", "full_body", "accessory"}
 	for _, v := range validCategories {
 		if v == category {
 			return true
 		}
 	}
 	return false
+}
+
+func validEnum(value string, allowed []string) bool {
+	if value == "" {
+		return true // identifiers are optional
+	}
+	for _, v := range allowed {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
+// ColorPrimaryValidator validates colorPrimary identifier
+func ColorPrimaryValidator(v string) bool {
+	return validEnum(v, []string{"white", "black", "navy", "beige", "grey", "brown", "red", "green", "blue", "yellow", "pink", "purple", "orange", "multicolor"})
+}
+
+// ColorToneValidator validates colorTone identifier
+func ColorToneValidator(v string) bool {
+	return validEnum(v, []string{"neutral", "pastel", "neon", "earth", "bold"})
+}
+
+// FitValidator validates fit identifier
+func FitValidator(v string) bool {
+	return validEnum(v, []string{"slim", "regular", "oversized", "relaxed"})
+}
+
+// OccasionValidator validates occasion identifier
+func OccasionValidator(v string) bool {
+	return validEnum(v, []string{"casual", "smart_casual", "date_night", "weekend", "all"})
+}
+
+// SeasonValidator validates season identifier
+func SeasonValidator(v string) bool {
+	return validEnum(v, []string{"spring", "summer", "fall", "winter", "all"})
+}
+
+// FormalityValidator validates formality identifier
+func FormalityValidator(v string) bool {
+	return validEnum(v, []string{"casual", "smart_casual", "formal"})
+}
+
+// StyleValidator validates style identifier
+func StyleValidator(v string) bool {
+	return validEnum(v, []string{"streetwear", "classic", "bohemian", "minimalist"})
+}
+
+// PatternValidator validates pattern identifier
+func PatternValidator(v string) bool {
+	return validEnum(v, []string{"solid", "stripes", "checks", "floral", "graphic"})
+}
+
+// ContextFilterValidator validates context_filter request field
+func ContextFilterValidator(v string) bool {
+	return validEnum(v, []string{"all", "casual", "smart_casual", "date_night", "weekend"})
+}
+
+// TriggerItemTypeValidator validates trigger_item_type request field
+func TriggerItemTypeValidator(v string) bool {
+	return validEnum(v, []string{"catalog", "closet"})
 }
 
 // PaymentMethodValidator validates payment method enum

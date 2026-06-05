@@ -31,11 +31,12 @@ db.reviews.createIndex({ productId: 1, createdAt: -1 });
 db.reviews.createIndex({ rating: 1 });
 db.reviews.createIndex({ helpful: -1 });
 
-// Create wardrobe_items collection with indexes
-db.createCollection('wardrobe_items');
-db.wardrobe_items.createIndex({ userId: 1, category: 1 });
-db.wardrobe_items.createIndex({ userId: 1, subtype: 1 });
-db.wardrobe_items.createIndex({ userId: 1, createdAt: -1 });
+// Create wardrobeItems collection with indexes
+db.createCollection('wardrobeItems');
+db.wardrobeItems.createIndex({ userId: 1, category: 1 });
+db.wardrobeItems.createIndex({ userId: 1, subtype: 1 });
+db.wardrobeItems.createIndex({ userId: 1, createdAt: -1 });
+db.wardrobeItems.createIndex({ userId: 1, isActive: 1, "identifiers.occasion": 1 });
 
 // Insert sample data (optional)
 // Users with sample data
@@ -118,5 +119,5 @@ db.products.insertMany([
 
 print("MongoDB initialization complete!");
 print("Database: kloset_dev");
-print("Collections created: users, products, orders, reviews, wardrobe_items");
+print("Collections created: users, products, orders, reviews, wardrobeItems");
 print("Indexes created for all collections");
