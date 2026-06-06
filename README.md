@@ -1,370 +1,293 @@
-# Kloset Backend API - Go Implementation
+# Kloset Backend API
 
-Complete Go backend reimplementation of Fittingly e-commerce API with 100% API contract compatibility.
+Go REST API for the Kloset fashion-tech platform — virtual wardrobe, AI avatar, shopping cart, and orders.
 
-## Project Status
+## Tech Stack
 
-**Implementation Progress: 126/153 tasks (82%)**
+| Concern | Technology |
+|---------|-----------|
+| Language | Go 1.25 |
+| HTTP framework | Gin |
+| Database | MongoDB 5.0+ |
+| Image storage | Cloudinary |
+| Authentication | JWT (HS256, 7-day expiry) |
+| Password hashing | bcrypt (12 rounds) |
+| Rate limiting | In-memory sliding window |
 
-### Completed Phases
-- ✅ Phase 1: Project Setup & Dependencies (6/6)
-- ✅ Phase 2: Database Models & Indexes (9/9)
-- ✅ Phase 3: Authentication API (9/9)
-- ✅ Phase 4: Products API (11/11)
-- ✅ Phase 5: Shopping Cart API (7/7)
-- ✅ Phase 6: Orders API (10/10)
-- ✅ Phase 7: Reviews API (10/10)
-- ✅ Phase 8: Virtual Wardrobe API (9/9)
-- ✅ Phase 9: Image Upload API (8/8)
-- ✅ Phase 10: Middleware Stack (9/9)
-- ✅ Phase 11: Input Validation (10/10)
-- ✅ Phase 12: Pagination (9/9)
-- ✅ Phase 13: API Response Formatting (11/11)
-- ✅ Phase 14: Error Handling (9/9)
-- ⏳ Phase 15: Integration & Testing (14/14) - Ready for testing
-- ⏳ Phase 16: Deployment & Documentation (12/12) - Ready
+## Project Structure
 
-## Architecture
-
-### Technology Stack
-- **Framework**: Gin Web Framework
-- **Database**: MongoDB with native Go driver
-- **Authentication**: JWT (7-day expiry)
-- **Password Hashing**: bcrypt (salt rounds 12)
-- **Image Storage**: Cloudinary
-- **Rate Limiting**: In-memory store (15-min window, 100 req/IP)
-- **Security**: CORS, Helmet-like headers, HTTPS-ready
-
-### Project Structure
 ```
 .
-├── cmd/
-│   └── server/
-│       └── main.go              # Server entry point
+├── cmd/server/main.go           # Entry point, route registration
 ├── internal/
 │   ├── config/
 │   │   ├── database.go          # MongoDB connection
-│   │   └── cloudinary.go        # Cloudinary setup
+│   │   └── cloudinary.go        # Cloudinary SDK init
 │   ├── handlers/
-│   │   ├── auth.go              # Authentication endpoints
-│   │   ├── profile.go           # Profile management
+│   │   ├── auth.go              # Register / login
+│   │   ├── profile.go           # Profile update (avatar base64 → Cloudinary)
+│   │   ├── avatar.go            # Avatar check / save
 │   │   ├── products.go          # Product catalog
-│   │   ├── products_update.go   # Product updates
+│   │   ├── products_update.go   # Product mutations
 │   │   ├── cart.go              # Shopping cart
 │   │   ├── orders.go            # Order management
 │   │   ├── reviews.go           # Product reviews
 │   │   ├── wardrobe.go          # Virtual wardrobe
-│   │   └── upload.go            # Image uploads
+│   │   ├── upload.go            # Image upload → Cloudinary
+│   │   └── recommendations.go  # Outfit recommendations
 │   ├── middleware/
-│   │   ├── auth.go              # JWT middleware
-│   │   ├── security.go          # Security headers
+│   │   ├── auth.go              # JWT validation
+│   │   ├── security.go          # CORS + security headers
 │   │   └── ratelimit.go         # Rate limiting
 │   ├── models/
-│   │   ├── user.go              # User model
-│   │   ├── product.go           # Product model
-│   │   ├── order.go             # Order model
-│   │   ├── review.go            # Review model
-│   │   ├── wardrobe.go          # Wardrobe model
-│   │   └── indexes.go           # Database indexes
+│   │   ├── user.go              # User + CartItem (with _id)
+│   │   ├── product.go
+│   │   ├── order.go
+│   │   ├── review.go
+│   │   ├── wardrobe.go
+│   │   └── indexes.go
 │   └── utils/
-│       ├── logger.go            # Logging
-│       ├── response.go          # API responses
-│       ├── validation.go        # Input validation
-│       └── auth.go              # Auth utilities
-├── .env.development             # Development config
-├── .env.production              # Production config
-└── go.mod                       # Go modules
-
+│       ├── cloudinary.go        # Upload helpers (file, data URI, delete)
+│       ├── auth.go
+│       ├── response.go
+│       ├── validation.go
+│       └── logger.go
+├── .env.example                 # Environment variable template (safe to commit)
+├── .env                         # Your local credentials (git-ignored, never commit)
+├── docker-compose.yml           # MongoDB + API + Mongo Express
+└── go.mod
 ```
 
-## Setup
+## Local Development
 
 ### Prerequisites
-- Go 1.21+
-- MongoDB 5.0+
-- Cloudinary account (optional, mocked in uploads)
 
-### Installation
+- Docker and Docker Compose
+- A [Cloudinary](https://cloudinary.com) account (free tier is sufficient)
 
-1. **Install dependencies**
+### 1 — Configure environment
+
 ```bash
-go mod tidy
+cp .env.example .env
 ```
 
-2. **Configure environment**
-```bash
-cp .env.development .env
-# Edit .env with your MongoDB and Cloudinary credentials
+Open `.env` and fill in your Cloudinary credentials (find them on the Cloudinary dashboard):
+
+```env
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
 ```
 
-3. **Build the server**
+The other variables have working defaults for local development — you only need to set the Cloudinary ones.
+
+> **Never commit `.env`** — it is git-ignored. Commit only `.env.example`.
+
+### 2 — Start everything
+
 ```bash
-go build -o bin/server ./cmd/server
+docker compose up
 ```
 
-4. **Run the server**
+Docker Compose reads `.env` automatically and injects the variables into the container. This starts:
+
+| Service | URL |
+|---------|-----|
+| API | http://localhost:8080 |
+| MongoDB | mongodb://localhost:27017 |
+| Mongo Express (DB UI) | http://localhost:8081 (admin / password) |
+
+### 3 — Run without Docker (Go installed locally)
+
 ```bash
-./bin/server
-# Server starts on http://localhost:8080
+# Export env vars manually since loadEnv() doesn't auto-load .env files
+export $(grep -v '^#' .env | xargs)
+
+go run ./cmd/server/main.go
 ```
+
+## Image Storage — Cloudinary
+
+All user-uploaded images are stored in Cloudinary. The backend never saves binary data in MongoDB — only the resulting CDN URL is persisted.
+
+### Upload flows
+
+| Flow | Endpoint | Cloudinary folder |
+|------|----------|-------------------|
+| Wardrobe item photo | `POST /api/upload/wardrobe` | `kloset/wardrobe/{userId}/` |
+| Generic image | `POST /api/upload/image` | `kloset/images/` |
+| Product image (admin) | `POST /api/upload/product` | `kloset/products/` |
+| Avatar (via profile update) | `PUT /api/auth/profile` | `kloset/avatars/` |
+
+### Avatar — automatic base64 detection
+
+Avatar images are generated by Google Gemini on the client, which returns a raw base64 data URI (`data:image/png;base64,...`). The `PUT /api/auth/profile` handler detects the `data:` prefix, uploads the image to Cloudinary transparently, and stores only the CDN URL in MongoDB. The frontend requires no change — it just sends whatever URL or data URI it has.
+
+### What happens when Cloudinary is not configured
+
+The `config.GetCloudinary()` call returns `nil` if any of the three credentials are missing. Upload handlers will return a `500` error. If you want to run locally without a Cloudinary account, the frontend's mock mode (`npm run dev:mock`) intercepts all upload calls and returns placeholder image URLs — no backend needed at all.
 
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - User login
-- `GET /api/auth/me` - Get profile (requires auth)
-- `PUT /api/auth/profile` - Update profile (requires auth)
-- `PUT /api/auth/change-password` - Change password (requires auth)
-- `POST /api/auth/logout` - Logout (requires auth)
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/auth/register` | — | Register new user |
+| POST | `/api/auth/login` | — | Login, returns JWT |
+| GET | `/api/auth/me` | ✓ | Get own profile |
+| PUT | `/api/auth/profile` | ✓ | Update profile (avatar base64 auto-uploaded) |
+| PUT | `/api/auth/change-password` | ✓ | Change password |
+| POST | `/api/auth/logout` | ✓ | Logout |
+
+### Avatar
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/avatar/check` | ✓ | Returns `{ hasAvatar, avatarUrl }` |
+| POST | `/api/avatar/save` | ✓ | Save avatar URL (base64 auto-uploaded) |
 
 ### Products
-- `GET /api/products` - List products with filtering/sorting/pagination
-- `GET /api/products/:id` - Get single product
-- `GET /api/products/categories` - List categories
-- `GET /api/products/featured` - Get featured products
-- `GET /api/products/:id/related` - Get related products
-- `POST /api/products` - Create product (admin only)
-- `PUT /api/products/:id` - Update product (admin only)
-- `DELETE /api/products/:id` - Delete product (admin only)
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/products` | — | List with filter/sort/pagination |
+| GET | `/api/products/categories` | — | Category list |
+| GET | `/api/products/featured` | — | Featured products |
+| GET | `/api/products/:id` | — | Product detail |
+| GET | `/api/products/:id/related` | — | Related products |
+| POST | `/api/products` | ✓ | Create product |
+| PUT | `/api/products/:id` | ✓ | Update product |
+| DELETE | `/api/products/:id` | ✓ | Delete product |
 
-### Shopping Cart
-- `GET /api/cart` - Get user's cart (requires auth)
-- `GET /api/cart/count` - Get cart item count (requires auth)
-- `POST /api/cart` - Add item to cart (requires auth)
-- `PUT /api/cart/:itemId` - Update cart item (requires auth)
-- `DELETE /api/cart/:itemId` - Remove item from cart (requires auth)
-- `DELETE /api/cart` - Clear cart (requires auth)
+### Cart
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/cart` | ✓ | Get cart (`{ items, total }`) |
+| GET | `/api/cart/count` | ✓ | Item count |
+| POST | `/api/cart` | ✓ | Add item (generates `_id` per item) |
+| PUT | `/api/cart/:itemId` | ✓ | Update quantity |
+| DELETE | `/api/cart/:itemId` | ✓ | Remove item |
+| DELETE | `/api/cart` | ✓ | Clear cart |
 
 ### Orders
-- `GET /api/orders` - List user's orders (requires auth)
-- `GET /api/orders/:id` - Get single order (requires auth)
-- `GET /api/orders/stats` - Get order statistics (requires auth)
-- `POST /api/orders` - Create order (requires auth)
-- `PUT /api/orders/:id/status` - Update order status (admin only)
-- `PUT /api/orders/:id/cancel` - Cancel order (requires auth)
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/orders` | ✓ | List orders |
+| GET | `/api/orders/:id` | ✓ | Order detail |
+| GET | `/api/orders/stats` | ✓ | Order statistics |
+| POST | `/api/orders` | ✓ | Place order |
+| PUT | `/api/orders/:id/status` | ✓ | Update status |
+| PUT | `/api/orders/:id/cancel` | ✓ | Cancel order |
 
 ### Reviews
-- `GET /api/reviews/product/:productId` - Get product reviews
-- `GET /api/reviews/my` - Get user's reviews (requires auth)
-- `GET /api/reviews/stats` - Get user's review stats (requires auth)
-- `POST /api/reviews` - Create review (requires auth)
-- `PUT /api/reviews/:id` - Update review (requires auth)
-- `DELETE /api/reviews/:id` - Delete review (requires auth)
-- `POST /api/reviews/:id/helpful` - Mark as helpful
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/reviews/product/:productId` | — | Product reviews |
+| GET | `/api/reviews/my` | ✓ | Own reviews |
+| GET | `/api/reviews/stats` | ✓ | Review statistics |
+| POST | `/api/reviews` | ✓ | Create review |
+| PUT | `/api/reviews/:id` | ✓ | Update review |
+| DELETE | `/api/reviews/:id` | ✓ | Delete review |
+| POST | `/api/reviews/:id/helpful` | — | Mark helpful |
 
-### Virtual Wardrobe
-- `GET /api/wardrobe` - List wardrobe items (requires auth)
-- `GET /api/wardrobe/:id` - Get single item (requires auth)
-- `GET /api/wardrobe/stats` - Get statistics (requires auth)
-- `GET /api/wardrobe/category/:category` - Get by category (requires auth)
-- `POST /api/wardrobe` - Create item (requires auth)
-- `PUT /api/wardrobe/:id` - Update item (requires auth)
-- `DELETE /api/wardrobe/:id` - Delete item (requires auth)
+### Wardrobe
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/wardrobe` | ✓ | List items (filter by category/subtype, paginated) |
+| GET | `/api/wardrobe/stats` | ✓ | Counts by category and condition |
+| GET | `/api/wardrobe/category/:category` | ✓ | Items in one category |
+| GET | `/api/wardrobe/:id` | ✓ | Single item |
+| POST | `/api/wardrobe` | ✓ | Create item |
+| PUT | `/api/wardrobe/:id` | ✓ | Update item |
+| DELETE | `/api/wardrobe/:id` | ✓ | Delete item |
 
 ### Image Upload
-- `POST /api/upload/image` - Upload single image (requires auth)
-- `POST /api/upload/images` - Upload multiple images (requires auth)
-- `POST /api/upload/wardrobe` - Upload wardrobe image (requires auth)
-- `POST /api/upload/product` - Upload product image (admin only)
-- `DELETE /api/upload/image` - Delete image by public ID
-- `GET /api/upload/optimize` - Get optimized image URL
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/upload/wardrobe` | ✓ | Upload wardrobe image → Cloudinary |
+| POST | `/api/upload/image` | ✓ | Upload generic image → Cloudinary |
+| POST | `/api/upload/images` | ✓ | Upload up to 10 images → Cloudinary |
+| POST | `/api/upload/product` | ✓ | Upload product image → Cloudinary |
+| DELETE | `/api/upload/image` | — | Delete by `publicId` |
+| GET | `/api/upload/optimize` | — | Return optimized URL |
 
 ### System
-- `GET /health` - Health check
-- `GET /api` - API info
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| GET | `/api` | API version info |
 
-## Request/Response Format
+## Request / Response Format
 
-### Standard Response
+All responses follow a standard envelope:
+
 ```json
 {
   "success": true,
   "message": "Operation successful",
   "data": {},
   "pagination": {
-    "page": 1,
-    "limit": 10,
-    "total": 100,
-    "pages": 10,
-    "hasNext": true,
-    "hasPrev": false
+    "page": 1, "limit": 10, "total": 100,
+    "pages": 10, "hasNext": true, "hasPrev": false
   }
 }
 ```
 
-### Error Response
+Errors:
 ```json
 {
   "success": false,
   "message": "Error description",
-  "error": "Detailed error message"
+  "error": "Detailed error"
 }
 ```
+
+## Environment Variables
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `PORT` | `8080` | — | Server port |
+| `ENV` | `development` | — | `development` or `production` |
+| `MONGODB_URI` | `mongodb://root:rootpassword@mongodb:27017/` | ✓ | MongoDB connection string |
+| `MONGODB_DATABASE` | `kloset_dev` | ✓ | Database name |
+| `JWT_SECRET` | `dev-secret-key-…` | ✓ in prod | JWT signing key |
+| `JWT_EXPIRY` | `7` | — | Token expiry in days |
+| `CLOUDINARY_CLOUD_NAME` | — | ✓ | Cloudinary cloud name |
+| `CLOUDINARY_API_KEY` | — | ✓ | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | — | ✓ | Cloudinary API secret |
+| `CORS_ORIGIN` | `http://localhost:3000,http://localhost:3001` | — | Allowed origins (comma-separated) |
+| `RATE_LIMIT_WINDOW` | `15m` | — | Rate limit window |
+| `RATE_LIMIT_MAX_REQUESTS` | `100` | — | Max requests per window per IP |
+
+## Production Deployment
+
+**Never commit `.env` with real credentials to git.**
+
+Inject secrets through your deployment platform instead:
+
+- **Managed platforms** (Railway, Render, Fly.io): paste values into the platform's environment variable dashboard
+- **GitHub Actions**: add secrets under *Settings → Secrets and variables → Actions*, then reference as `${{ secrets.CLOUDINARY_API_KEY }}` in your workflow
+- **Raw VPS**: SSH in and create `.env` on the server manually, or export the vars in the server's shell profile
 
 ## Validation Rules
 
 - **Email**: RFC 5322 format
-- **Password**: Minimum 6 characters (hashed with bcrypt, salt 12)
-- **Phone**: Indian format (10 digits, starting with 6-9)
-- **Name**: 2-50 characters
-- **Address**: 10-200 characters
-- **Pincode**: Exactly 6 digits (Indian format)
-- **Rating**: 1-5 integer
-- **Comment**: 10-500 characters
-- **Category**: upper, lower, shoes
+- **Password**: minimum 6 characters
+- **Phone**: 10-digit Indian format (starts with 6–9)
+- **Name**: 2–50 characters
+- **Rating**: 1–5 integer
+- **File size**: max 10 MB per upload (max 10 files for batch upload)
+- **Wardrobe category**: `upper`, `lower`, `shoes`, `accessories`
 
-## HTTP Status Codes
+## Security
 
-- `200 OK` - GET successful
-- `201 Created` - POST/Create successful
-- `400 Bad Request` - Validation error
-- `401 Unauthorized` - Auth required/invalid
-- `403 Forbidden` - Insufficient permissions
-- `404 Not Found` - Resource not found
-- `409 Conflict` - Duplicate/constraint violation
-- `429 Too Many Requests` - Rate limit exceeded
-- `500 Internal Server Error` - Server error
-
-## Testing
-
-### Manual Testing
-
-1. **Register User**
-```bash
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "John Doe",
-    "email": "john@example.com",
-    "password": "password123",
-    "phone": "9876543210",
-    "gender": "male"
-  }'
-```
-
-2. **Login**
-```bash
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "john@example.com",
-    "password": "password123"
-  }'
-```
-
-3. **Get Profile** (replace TOKEN with actual token)
-```bash
-curl -X GET http://localhost:8080/api/auth/me \
-  -H "Authorization: Bearer TOKEN"
-```
-
-4. **List Products**
-```bash
-curl -X GET "http://localhost:8080/api/products?page=1&limit=10&category=upper"
-```
-
-### Automated Testing (Ready to implement)
-- Unit tests for handlers
-- Integration tests with test database
-- API contract validation
-- Performance tests
-
-## Development Notes
-
-### Database Indexes
-All indexes are automatically created via `models.go` index functions:
-- User: email (unique), createdAt
-- Product: text search, category+subcategory, price, rating
-- Order: user+createdAt, orderStatus, paymentStatus, trackingNumber
-- Review: user+product (unique), product+createdAt, rating
-- WardrobeItem: user+category, user+subtype, user+createdAt
-
-### Rate Limiting
-- 15-minute sliding window
-- 100 requests per IP address
-- Returns `429 Too Many Requests`
-
-### JWT Configuration
-- Algorithm: HS256
-- Expiry: 7 days
-- Header: `Authorization: Bearer <token>`
-
-### File Upload Limits
-- Single file: max 10MB
-- Batch upload: max 10 files
-- Folders: wardrobe/, products/
-
-## Deployment
-
-### Docker (TODO)
-```dockerfile
-FROM golang:1.21 as builder
-WORKDIR /app
-COPY . .
-RUN go build -o server ./cmd/server
-
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-COPY --from=builder /app/server .
-EXPOSE 8080
-CMD ["./server"]
-```
-
-### Environment Variables
-```
-PORT=8080
-ENV=production
-MONGODB_URI=mongodb://...
-MONGODB_DATABASE=kloset_prod
-JWT_SECRET=<strong-secret>
-CLOUDINARY_CLOUD_NAME=...
-CLOUDINARY_API_KEY=...
-CLOUDINARY_API_SECRET=...
-CORS_ORIGIN=https://yourdomain.com
-```
-
-## Performance Considerations
-
-- Connection pooling: Min 10, Max 100
-- Database indexes on all query fields
-- Pagination max 100 items per request
-- Rate limiting to prevent abuse
-- Gzip compression for responses
-- Response time headers for monitoring
-
-## Security Features
-
-- JWT token authentication
+- JWT authentication on all protected routes
 - bcrypt password hashing (12 rounds)
-- Rate limiting per IP
-- CORS with credentials
-- Security headers (X-Frame-Options, Content-Security-Policy, etc.)
-- Input validation on all endpoints
-- SQL injection prevention via MongoDB driver
-- HTTPS ready
+- Rate limiting (100 req / 15 min / IP)
+- CORS with configurable allowed origins
+- Standard security headers (X-Frame-Options, CSP, etc.)
+- Cloudinary credentials never exposed to clients — all uploads go through the backend
 
 ## Known Limitations
 
-- Image uploads use mock Cloudinary in development
-- Admin check is simplified (TODO: implement proper roles)
-- Token blacklist not implemented (logout is client-side)
-- Review verified purchase flag not auto-populated
-
-## Future Enhancements
-
-- [ ] Complete Cloudinary integration
-- [ ] Admin role system
-- [ ] Token blacklist/refresh tokens
-- [ ] Elasticsearch for full-text search
-- [ ] Redis caching layer
-- [ ] GraphQL API alongside REST
-- [ ] Websocket for real-time updates
-- [ ] Email notifications
-- [ ] Analytics & reporting
-- [ ] Payment gateway integration
-- [ ] Recommendation engine
-- [ ] Search analytics
-
-
+- Logout is client-side only (no server-side token blacklist)
+- Admin role is not implemented — all authenticated users can create/update products
+- Outfit recommendation endpoint exists but returns static results (no ML model)

@@ -1,0 +1,29 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+dist/
+
+# Environment files — NEVER commit real credentials
+.env
+.env.*
+!.env.example
+
+# Go test cache
+*.test
+*.out
+coverage.html
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Docker volumes (if accidentally created locally)
+mongodb_data/

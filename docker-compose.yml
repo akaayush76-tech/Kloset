@@ -4,6 +4,14 @@ services:
     image: mongo:latest
     container_name: kloset-mongodb
     restart: unless-stopped
+    # --quiet suppresses INFO-level lifecycle messages.
+    # The WiredTiger config string silences the WTRECOV / WTCHKPT / WTEVICT
+    # verbose output that otherwise floods the terminal on startup/shutdown.
+    command:
+      - mongod
+      - --quiet
+      - --wiredTigerEngineConfigString
+      - "verbose=(recovery_progress:0,checkpoint_progress:0,compact:0,eviction:0)"
     ports:
       - "27017:27017"
     environment:
