@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -72,6 +73,20 @@ func SaveAvatarHandler(c *gin.Context) {
 		return
 	}
 
+	// Upload to Cloudinary if a base64 data URI was provided instead of a URL.
+	avatarURL := req.AvatarURL
+	if strings.HasPrefix(avatarURL, "data:") {
+		uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer uploadCancel()
+
+		result, err := utils.UploadDataURIToCloudinary(uploadCtx, avatarURL, "kloset/avatars")
+		if err != nil {
+			utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error uploading avatar image", err)
+			return
+		}
+		avatarURL = result.URL
+	}
+
 	objID, err := primitive.ObjectIDFromHex(userID.(string))
 	if err != nil {
 		utils.HTTPErrorHandler(c, http.StatusBadRequest, "Invalid user ID", err)
@@ -86,7 +101,7 @@ func SaveAvatarHandler(c *gin.Context) {
 
 	update := bson.M{
 		"$set": bson.M{
-			"avatar":    req.AvatarURL,
+			"avatar":    avatarURL,
 			"updatedAt": time.Now(),
 		},
 	}
