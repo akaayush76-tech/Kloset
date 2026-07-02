@@ -130,6 +130,21 @@ func main() {
 		wardrobeGroup.DELETE("/:id", handlers.DeleteWardrobeItemHandler)
 	}
 
+	// Avatar routes
+	avatarGroup := router.Group("/api/avatar")
+	avatarGroup.Use(middleware.AuthMiddleware)
+	{
+		avatarGroup.GET("/check", handlers.CheckAvatarHandler)
+		avatarGroup.POST("/save", handlers.SaveAvatarHandler)
+	}
+
+	// Recommendation routes
+	recGroup := router.Group("/api/recommendations")
+	recGroup.Use(middleware.AuthMiddleware)
+	{
+		recGroup.POST("/outfits", handlers.RecommendOutfitsHandler)
+	}
+
 	// Upload routes
 	uploadGroup := router.Group("/api/upload")
 	{

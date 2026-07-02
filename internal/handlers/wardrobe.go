@@ -138,18 +138,19 @@ func GetWardrobeItemHandler(c *gin.Context) {
 
 // CreateWardrobeItemRequest represents wardrobe item creation request
 type CreateWardrobeItemRequest struct {
-	Name         string   `json:"name" binding:"required"`
-	Category     string   `json:"category" binding:"required"`
-	Subtype      string   `json:"subtype" binding:"required"`
-	Color        string   `json:"color" binding:"required"`
-	Image        string   `json:"image" binding:"required"`
-	Brand        string   `json:"brand"`
-	Size         string   `json:"size"`
-	PurchaseDate string   `json:"purchaseDate"`
-	Price        float64  `json:"price"`
-	Tags         []string `json:"tags"`
-	Condition    string   `json:"condition"`
-	Notes        string   `json:"notes"`
+	Name         string                `json:"name" binding:"required"`
+	Category     string                `json:"category" binding:"required"`
+	Subtype      string                `json:"subtype" binding:"required"`
+	Color        string                `json:"color" binding:"required"`
+	Image        string                `json:"image" binding:"required"`
+	Brand        string                `json:"brand"`
+	Size         string                `json:"size"`
+	PurchaseDate string                `json:"purchaseDate"`
+	Price        float64               `json:"price"`
+	Tags         []string              `json:"tags"`
+	Condition    string                `json:"condition"`
+	Notes        string                `json:"notes"`
+	Identifiers  models.ItemIdentifiers `json:"identifiers"`
 }
 
 // CreateWardrobeItemHandler creates a new wardrobe item
@@ -206,6 +207,7 @@ func CreateWardrobeItemHandler(c *gin.Context) {
 		Tags:         req.Tags,
 		Condition:    req.Condition,
 		Notes:        req.Notes,
+		Identifiers:  req.Identifiers,
 		IsActive:     true,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
@@ -229,16 +231,17 @@ func CreateWardrobeItemHandler(c *gin.Context) {
 
 // UpdateWardrobeItemRequest represents wardrobe item update request
 type UpdateWardrobeItemRequest struct {
-	Name      string  `json:"name"`
-	Category  string  `json:"category"`
-	Subtype   string  `json:"subtype"`
-	Color     string  `json:"color"`
-	Image     string  `json:"image"`
-	Brand     string  `json:"brand"`
-	Size      string  `json:"size"`
-	Price     float64 `json:"price"`
-	Condition string  `json:"condition"`
-	Notes     string  `json:"notes"`
+	Name        string                 `json:"name"`
+	Category    string                 `json:"category"`
+	Subtype     string                 `json:"subtype"`
+	Color       string                 `json:"color"`
+	Image       string                 `json:"image"`
+	Brand       string                 `json:"brand"`
+	Size        string                 `json:"size"`
+	Price       float64                `json:"price"`
+	Condition   string                 `json:"condition"`
+	Notes       string                 `json:"notes"`
+	Identifiers *models.ItemIdentifiers `json:"identifiers"`
 }
 
 // UpdateWardrobeItemHandler updates a wardrobe item
@@ -310,6 +313,9 @@ func UpdateWardrobeItemHandler(c *gin.Context) {
 	}
 	if req.Notes != "" {
 		update["$set"].(bson.M)["notes"] = req.Notes
+	}
+	if req.Identifiers != nil {
+		update["$set"].(bson.M)["identifiers"] = req.Identifiers
 	}
 
 	result := collection.FindOneAndUpdate(ctx, bson.M{

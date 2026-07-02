@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -90,6 +91,21 @@ func UpdateProfileHandler(c *gin.Context) {
 		return
 	}
 
+	// If the avatar value is a base64 data URI, upload it to Cloudinary and
+	// store the resulting CDN URL instead of the raw blob in MongoDB.
+	avatarURL := req.Avatar
+	if avatarURL != "" && strings.HasPrefix(avatarURL, "data:") {
+		uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer uploadCancel()
+
+		result, err := utils.UploadDataURIToCloudinary(uploadCtx, avatarURL, "kloset/avatars")
+		if err != nil {
+			utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error uploading avatar image", err)
+			return
+		}
+		avatarURL = result.URL
+	}
+
 	// Prepare update
 	update := bson.M{
 		"$set": bson.M{
@@ -103,8 +119,8 @@ func UpdateProfileHandler(c *gin.Context) {
 	if req.Phone != "" {
 		update["$set"].(bson.M)["phone"] = req.Phone
 	}
-	if req.Avatar != "" {
-		update["$set"].(bson.M)["avatar"] = req.Avatar
+	if avatarURL != "" {
+		update["$set"].(bson.M)["avatar"] = avatarURL
 	}
 	if req.Gender != "" {
 		update["$set"].(bson.M)["gender"] = req.Gender

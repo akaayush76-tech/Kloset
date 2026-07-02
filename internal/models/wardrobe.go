@@ -11,7 +11,7 @@ type WardrobeItem struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID       primitive.ObjectID `bson:"userId" json:"userId"`
 	Name         string             `bson:"name" json:"name"`
-	Category     string             `bson:"category" json:"category"` // upper, lower, shoes
+	Category     string             `bson:"category" json:"category"` // upper, lower, shoes, outerwear, full_body, accessory
 	Subtype      string             `bson:"subtype" json:"subtype"`   // t-shirt, jeans, etc
 	Color        string             `bson:"color" json:"color"`
 	Image        string             `bson:"image" json:"image"`
@@ -22,6 +22,7 @@ type WardrobeItem struct {
 	Tags         []string           `bson:"tags" json:"tags"`
 	Condition    string             `bson:"condition" json:"condition"` // new, like-new, good, fair
 	Notes        string             `bson:"notes" json:"notes"`
+	Identifiers  ItemIdentifiers    `bson:"identifiers" json:"identifiers"`
 	IsActive     bool               `bson:"isActive" json:"isActive"`
 	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
 	UpdatedAt    time.Time          `bson:"updatedAt" json:"updatedAt"`

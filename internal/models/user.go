@@ -40,6 +40,7 @@ type User struct {
 
 // CartItem represents an item in user's cart
 type CartItem struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	ProductID primitive.ObjectID `bson:"productId" json:"productId"`
 	Quantity  int                `bson:"quantity" json:"quantity"`
 	Size      string             `bson:"size" json:"size"`

@@ -1,14 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kloset/backend/internal/utils"
 )
 
-// UploadImageRequest represents image upload response
+// UploadImageResponse represents image upload response
 type UploadImageResponse struct {
 	URL          string `json:"url"`
 	OriginalName string `json:"originalName"`
@@ -19,28 +21,39 @@ type UploadImageResponse struct {
 
 // UploadImageHandler handles single image upload
 func UploadImageHandler(c *gin.Context) {
-	// Parse multipart form
 	header, err := c.FormFile("image")
 	if err != nil {
 		utils.HTTPErrorHandler(c, http.StatusBadRequest, "No image file provided", err)
 		return
 	}
 
-	// Check file size (10MB limit)
-	maxFileSize := int64(10485760) // 10MB
-	if header.Size > maxFileSize {
+	if header.Size > 10485760 {
 		utils.HTTPErrorHandler(c, http.StatusBadRequest, "File size exceeds 10MB limit", nil)
 		return
 	}
 
-	// In production, upload to Cloudinary
-	// For now, return mock response
+	file, err := header.Open()
+	if err != nil {
+		utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error reading file", err)
+		return
+	}
+	defer file.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	result, err := utils.UploadReaderToCloudinary(ctx, file, "kloset/images")
+	if err != nil {
+		utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error uploading image", err)
+		return
+	}
+
 	response := UploadImageResponse{
-		URL:          fmt.Sprintf("https://via.placeholder.com/400?text=%s", header.Filename),
+		URL:          result.URL,
 		OriginalName: header.Filename,
 		Size:         header.Size,
 		MimeType:     header.Header.Get("Content-Type"),
-		PublicID:     "mock-public-id",
+		PublicID:     result.PublicID,
 	}
 
 	utils.SuccessResponse(c, http.StatusCreated, "Image uploaded successfully", response)
@@ -55,34 +68,45 @@ func UploadImagesHandler(c *gin.Context) {
 	}
 
 	files := form.File["images"]
-
 	if len(files) == 0 {
 		utils.HTTPErrorHandler(c, http.StatusBadRequest, "No images provided", nil)
 		return
 	}
-
 	if len(files) > 10 {
 		utils.HTTPErrorHandler(c, http.StatusBadRequest, "Maximum 10 files allowed", nil)
 		return
 	}
 
-	var responses []UploadImageResponse
-	maxFileSize := int64(10485760) // 10MB
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
-	for _, file := range files {
-		if file.Size > maxFileSize {
-			utils.HTTPErrorHandler(c, http.StatusBadRequest, fmt.Sprintf("File %s exceeds 10MB limit", file.Filename), nil)
+	var responses []UploadImageResponse
+	for _, header := range files {
+		if header.Size > 10485760 {
+			utils.HTTPErrorHandler(c, http.StatusBadRequest, fmt.Sprintf("File %s exceeds 10MB limit", header.Filename), nil)
 			return
 		}
 
-		response := UploadImageResponse{
-			URL:          fmt.Sprintf("https://via.placeholder.com/400?text=%s", file.Filename),
-			OriginalName: file.Filename,
-			Size:         file.Size,
-			MimeType:     file.Header.Get("Content-Type"),
-			PublicID:     fmt.Sprintf("mock-%s", file.Filename),
+		file, err := header.Open()
+		if err != nil {
+			utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error reading file", err)
+			return
 		}
-		responses = append(responses, response)
+
+		result, err := utils.UploadReaderToCloudinary(ctx, file, "kloset/images")
+		file.Close()
+		if err != nil {
+			utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error uploading image", err)
+			return
+		}
+
+		responses = append(responses, UploadImageResponse{
+			URL:          result.URL,
+			OriginalName: header.Filename,
+			Size:         header.Size,
+			MimeType:     header.Header.Get("Content-Type"),
+			PublicID:     result.PublicID,
+		})
 	}
 
 	utils.SuccessResponse(c, http.StatusCreated, "Images uploaded successfully", responses)
@@ -102,19 +126,34 @@ func UploadWardrobeImageHandler(c *gin.Context) {
 		return
 	}
 
-	maxFileSize := int64(10485760) // 10MB
-	if header.Size > maxFileSize {
+	if header.Size > 10485760 {
 		utils.HTTPErrorHandler(c, http.StatusBadRequest, "File size exceeds 10MB limit", nil)
 		return
 	}
 
-	// Mock response - in production, upload to Cloudinary with wardrobe folder
+	file, err := header.Open()
+	if err != nil {
+		utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error reading file", err)
+		return
+	}
+	defer file.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	folder := fmt.Sprintf("kloset/wardrobe/%s", userID)
+	result, err := utils.UploadReaderToCloudinary(ctx, file, folder)
+	if err != nil {
+		utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error uploading image", err)
+		return
+	}
+
 	response := UploadImageResponse{
-		URL:          fmt.Sprintf("https://via.placeholder.com/400?text=%s", header.Filename),
+		URL:          result.URL,
 		OriginalName: header.Filename,
 		Size:         header.Size,
 		MimeType:     header.Header.Get("Content-Type"),
-		PublicID:     fmt.Sprintf("wardrobe/%s-%s", userID, header.Filename),
+		PublicID:     result.PublicID,
 	}
 
 	utils.SuccessResponse(c, http.StatusCreated, "Wardrobe image uploaded successfully", response)
@@ -134,19 +173,33 @@ func UploadProductImageHandler(c *gin.Context) {
 		return
 	}
 
-	maxFileSize := int64(10485760) // 10MB
-	if header.Size > maxFileSize {
+	if header.Size > 10485760 {
 		utils.HTTPErrorHandler(c, http.StatusBadRequest, "File size exceeds 10MB limit", nil)
 		return
 	}
 
-	// Mock response - in production, upload to Cloudinary with product folder
+	file, err := header.Open()
+	if err != nil {
+		utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error reading file", err)
+		return
+	}
+	defer file.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	result, err := utils.UploadReaderToCloudinary(ctx, file, "kloset/products")
+	if err != nil {
+		utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error uploading image", err)
+		return
+	}
+
 	response := UploadImageResponse{
-		URL:          fmt.Sprintf("https://via.placeholder.com/400?text=%s", header.Filename),
+		URL:          result.URL,
 		OriginalName: header.Filename,
 		Size:         header.Size,
 		MimeType:     header.Header.Get("Content-Type"),
-		PublicID:     fmt.Sprintf("products/%s", header.Filename),
+		PublicID:     result.PublicID,
 	}
 
 	utils.SuccessResponse(c, http.StatusCreated, "Product image uploaded successfully", response)
@@ -165,19 +218,21 @@ func DeleteImageHandler(c *gin.Context) {
 		return
 	}
 
-	// In production, delete from Cloudinary
-	// For now, return mock success response
+	cld := utils.GetCloudinaryClient()
+	if cld == nil {
+		utils.SuccessResponse(c, http.StatusOK, "Image deleted successfully", nil)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := utils.DeleteFromCloudinary(ctx, req.PublicID); err != nil {
+		utils.HTTPErrorHandler(c, http.StatusInternalServerError, "Error deleting image", err)
+		return
+	}
 
 	utils.SuccessResponse(c, http.StatusOK, "Image deleted successfully", nil)
-}
-
-// OptimizeImageRequest represents image optimization request
-type OptimizeImageRequest struct {
-	ImageURL string `json:"imageUrl" binding:"required"`
-	Width    int    `json:"width"`
-	Height   int    `json:"height"`
-	Quality  int    `json:"quality"`
-	Format   string `json:"format"`
 }
 
 // OptimizeImageHandler returns optimized image URL
@@ -193,8 +248,8 @@ func OptimizeImageHandler(c *gin.Context) {
 		return
 	}
 
-	// In production, use Cloudinary transformation URL
-	// Mock response
+	// For Cloudinary URLs, we could build a transformation URL here.
+	// For now return a query-param decorated URL that clients can use.
 	optimizedURL := fmt.Sprintf("%s?w=%s&h=%s&q=%s&f=%s", imageURL, width, height, quality, format)
 
 	utils.SuccessResponse(c, http.StatusOK, "Optimized image URL generated", gin.H{

@@ -111,6 +111,7 @@ func AddToCartHandler(c *gin.Context) {
 
 	// Create cart item
 	cartItem := models.CartItem{
+		ID:        primitive.NewObjectID(),
 		ProductID: productID,
 		Quantity:  req.Quantity,
 		Size:      req.Size,
