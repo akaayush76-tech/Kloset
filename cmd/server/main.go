@@ -136,6 +136,15 @@ func main() {
 	{
 		avatarGroup.GET("/check", handlers.CheckAvatarHandler)
 		avatarGroup.POST("/save", handlers.SaveAvatarHandler)
+		avatarGroup.POST("/generate", handlers.GenerateAvatarHandler)
+	}
+
+	// Try-on routes
+	tryOnGroup := router.Group("/api/tryon")
+	tryOnGroup.Use(middleware.AuthMiddleware)
+	{
+		tryOnGroup.POST("", handlers.TryOnHandler)
+		tryOnGroup.DELETE("", handlers.DeleteTryOnHandler)
 	}
 
 	// Recommendation routes
