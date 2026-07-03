@@ -1,0 +1,42 @@
+# fly.toml app configuration file generated for kloset-api-prod on 2026-06-07T19:32:38+05:30
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'kloset-api-prod'
+primary_region = 'sin'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  ENV = 'production'
+  GIN_MODE = 'release'
+  JWT_EXPIRY = '7'
+  LOG_LEVEL = 'info'
+  MAX_FILE_SIZE = '10485760'
+  PORT = '8080'
+  RATE_LIMIT_MAX_REQUESTS = '100'
+  RATE_LIMIT_WINDOW = '15m'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/health'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 512
