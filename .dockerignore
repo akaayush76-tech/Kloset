@@ -1,0 +1,11 @@
+.env
+.env.*
+*.env
+bin/
+.git/
+.gitignore
+*.md
+Dockerfile.dev
+docker-compose*.yml
+scripts/
+fly.toml

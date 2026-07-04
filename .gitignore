@@ -27,3 +27,6 @@ Thumbs.db
 
 # Docker volumes (if accidentally created locally)
 mongodb_data/
+
+# Fly.io
+fly.toml
