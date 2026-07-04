@@ -143,8 +143,10 @@ func main() {
 	tryOnGroup := router.Group("/api/tryon")
 	tryOnGroup.Use(middleware.AuthMiddleware)
 	{
+		tryOnGroup.GET("", handlers.GetTryOnsHandler)
 		tryOnGroup.POST("", handlers.TryOnHandler)
-		tryOnGroup.DELETE("", handlers.DeleteTryOnHandler)
+		tryOnGroup.DELETE("", handlers.DeleteTryOnsHandler)
+		tryOnGroup.DELETE("/all", handlers.DeleteAllTryOnsHandler)
 	}
 
 	// Recommendation routes

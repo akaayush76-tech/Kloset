@@ -15,7 +15,7 @@ import (
 // EditImageForTryOn sends the avatar image, the product image, and an instruction
 // prompt to Gemini and returns the resulting PNG bytes.
 // avatarImage and productImage may each be a CDN/HTTP URL or a base64 data URI.
-func EditImageForTryOn(ctx context.Context, avatarImage, productImage, prompt string) ([]byte, error) {
+func EditImageForTryOn(ctx context.Context, avatarImage, productImage, prompt, productName, productColor, productCategory string) ([]byte, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY is not set")
@@ -31,13 +31,24 @@ func EditImageForTryOn(ctx context.Context, avatarImage, productImage, prompt st
 		return nil, fmt.Errorf("failed to load product image: %w", err)
 	}
 
+	// Build a specific label for the product image so Gemini knows exactly
+	// what item it is looking at before processing the image.
+	productLabel := fmt.Sprintf(
+		"IMAGE 2 — Reference %s to try on: \"%s\"",
+		productCategory, productName,
+	)
+	if productColor != "" {
+		productLabel += fmt.Sprintf(" in %s", productColor)
+	}
+	productLabel += ". Study this image carefully and extract the EXACT item — its precise color, shape, texture, logo, and design details. Ignore any model or person wearing it if present."
+
 	reqBody := geminiRequest{
 		Contents: []geminiContent{
 			{
 				Parts: []geminiPart{
-					{Text: "Image 1 — the person (avatar):"},
+					{Text: "IMAGE 1 — The person to dress (do not change their face, body, or background):"},
 					{InlineData: &geminiInlineData{MimeType: avatarMime, Data: avatarB64}},
-					{Text: "Image 2 — the clothing item to try on:"},
+					{Text: productLabel},
 					{InlineData: &geminiInlineData{MimeType: productMime, Data: productB64}},
 					{Text: prompt},
 				},

@@ -1,5 +1,5 @@
-# Build stage
-FROM golang:1.25-alpine AS builder
+# Build stage — use native build platform so cross-compilation works on ARM Macs
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
@@ -16,11 +16,13 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/server ./cmd/server
+# Cross-compile for the target platform (linux/amd64 on Fly.io)
+# CGO_ENABLED=0 means pure Go — no C toolchain needed for cross-compilation
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build -o bin/server ./cmd/server
 
 # Final stage
-FROM alpine:latest
+FROM --platform=linux/amd64 alpine:latest
 
 # Install runtime dependencies
 RUN apk --no-cache add ca-certificates tzdata
