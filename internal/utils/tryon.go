@@ -32,15 +32,28 @@ func EditImageForTryOn(ctx context.Context, avatarImage, productImage, prompt, p
 	}
 
 	// Build a specific label for the product image so Gemini knows exactly
-	// what item it is looking at before processing the image.
+	// what it is looking at before processing the image.
+	itemType := productCategory
+	if itemType == "" {
+		itemType = "clothing item"
+	}
+	var extractHint string
+	switch productCategory {
+	case "shoes":
+		extractHint = "Focus on the shoe only: its silhouette (high-top/low-top), sole, upper material, lace style, logo, and any branding. Ignore any foot or person in the photo."
+	case "lower":
+		extractHint = "Focus on the garment only: its cut, waistband, pockets, hem, fabric, and color. Ignore any person wearing it."
+	default:
+		extractHint = "Focus on the garment only: its color, pattern, logo, texture, collar, sleeves, and hem. Ignore any person wearing it."
+	}
 	productLabel := fmt.Sprintf(
-		"IMAGE 2 — Reference %s to try on: \"%s\"",
-		productCategory, productName,
+		"IMAGE 2 — %s to try on (visual reference takes priority over any text description): \"%s\"",
+		itemType, productName,
 	)
 	if productColor != "" {
-		productLabel += fmt.Sprintf(" in %s", productColor)
+		productLabel += fmt.Sprintf(", %s", productColor)
 	}
-	productLabel += ". Study this image carefully and extract the EXACT item — its precise color, shape, texture, logo, and design details. Ignore any model or person wearing it if present."
+	productLabel += ". " + extractHint + " Reproduce EXACTLY what you see in this image."
 
 	reqBody := geminiRequest{
 		Contents: []geminiContent{
@@ -97,6 +110,8 @@ func EditImageForTryOn(ctx context.Context, avatarImage, productImage, prompt, p
 		return nil, fmt.Errorf("gemini error %d: %s", gemResp.Error.Code, gemResp.Error.Message)
 	}
 
+	// Collect any text parts for diagnostics, look for an image part
+	var textParts []string
 	for _, candidate := range gemResp.Candidates {
 		for _, part := range candidate.Content.Parts {
 			if part.InlineData != nil && part.InlineData.Data != "" {
@@ -106,10 +121,17 @@ func EditImageForTryOn(ctx context.Context, avatarImage, productImage, prompt, p
 				}
 				return imgBytes, nil
 			}
+			if part.Text != "" {
+				textParts = append(textParts, part.Text)
+			}
 		}
 	}
 
-	return nil, fmt.Errorf("no image in gemini response")
+	// No image found — include Gemini's text response in the error so it's visible in logs
+	if len(textParts) > 0 {
+		return nil, fmt.Errorf("gemini returned no image; text response: %s", strings.Join(textParts, " | "))
+	}
+	return nil, fmt.Errorf("gemini returned no image and no text (empty response); raw: %s", string(body))
 }
 
 // resolveImageToBase64 accepts either an HTTP(S) URL or a base64 data URI and

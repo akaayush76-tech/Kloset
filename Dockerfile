@@ -33,6 +33,9 @@ WORKDIR /app
 # Copy built binary from builder
 COPY --from=builder /app/bin/server .
 
+# Copy runtime config (recommendation color matrix — tunable without rebuild)
+COPY --from=builder /app/config ./config
+
 # Create non-root user for security
 RUN addgroup -g 1000 appuser && \
     adduser -D -u 1000 -G appuser appuser

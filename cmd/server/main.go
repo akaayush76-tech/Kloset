@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kloset/backend/internal/config"
+	"github.com/kloset/backend/internal/engine"
 	"github.com/kloset/backend/internal/handlers"
 	"github.com/kloset/backend/internal/middleware"
 	"github.com/kloset/backend/internal/utils"
@@ -34,6 +35,9 @@ func main() {
 
 	// Initialize rate limiter
 	middleware.InitRateLimiter()
+
+	// Load the recommendation color matrix (tunable without a code deploy)
+	engine.LoadColorMatrix(os.Getenv("COLOR_MATRIX_PATH"))
 
 	// Create Gin router
 	router := gin.Default()
@@ -154,6 +158,16 @@ func main() {
 	recGroup.Use(middleware.AuthMiddleware)
 	{
 		recGroup.POST("/outfits", handlers.RecommendOutfitsHandler)
+		recGroup.POST("/wear", handlers.LogWornOutfitHandler)
+	}
+
+	// Wishlist routes
+	wishlistGroup := router.Group("/api/wishlist")
+	wishlistGroup.Use(middleware.AuthMiddleware)
+	{
+		wishlistGroup.GET("", handlers.GetWishlistHandler)
+		wishlistGroup.POST("/:productId", handlers.AddToWishlistHandler)
+		wishlistGroup.DELETE("/:productId", handlers.RemoveFromWishlistHandler)
 	}
 
 	// Upload routes

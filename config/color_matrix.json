@@ -1,0 +1,32 @@
+{
+  "tiers": {
+    "high": 1.0,
+    "med": 0.75,
+    "low": 0.35,
+    "blocked": 0.10,
+    "unknown": 0.40
+  },
+  "pairs": {
+    "high": [
+      ["white", "navy"], ["white", "black"], ["white", "beige"], ["white", "grey"],
+      ["white", "brown"], ["white", "blue"], ["black", "grey"], ["black", "beige"],
+      ["black", "navy"], ["black", "red"], ["navy", "beige"], ["navy", "grey"],
+      ["beige", "brown"], ["brown", "navy"]
+    ],
+    "med": [
+      ["blue", "grey"], ["blue", "white"], ["blue", "beige"], ["red", "navy"],
+      ["red", "grey"], ["green", "beige"], ["green", "brown"], ["pink", "grey"],
+      ["pink", "white"], ["pink", "navy"], ["purple", "grey"], ["purple", "navy"],
+      ["orange", "navy"], ["orange", "brown"], ["yellow", "navy"], ["yellow", "grey"],
+      ["multicolor", "white"], ["multicolor", "black"], ["multicolor", "navy"],
+      ["white", "white"], ["black", "black"], ["navy", "navy"], ["grey", "grey"]
+    ],
+    "low": [
+      ["red", "orange"], ["red", "pink"], ["red", "red"], ["orange", "pink"],
+      ["yellow", "orange"], ["neon", "neon"], ["multicolor", "multicolor"]
+    ],
+    "blocked": [
+      ["brown", "black"], ["red", "green"]
+    ]
+  }
+}

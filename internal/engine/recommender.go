@@ -3,7 +3,9 @@ package engine
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/kloset/backend/internal/models"
@@ -13,11 +15,26 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const maxOptionalCandidates = 5
+const (
+	maxOptionalCandidates = 5
+	maxDailyTriggers      = 15 // bound on pseudo-triggers in daily-closet mode
+	defaultMaxResults     = 8
+)
+
+// maxOutfitResults returns the per-call result cap, configurable via the
+// MAX_OUTFIT_RESULTS env var (spec §4.3).
+func maxOutfitResults() int {
+	if raw := os.Getenv("MAX_OUTFIT_RESULTS"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultMaxResults
+}
 
 // RecommendRequest mirrors the API request body.
 type RecommendRequest struct {
-	TriggerItemID    string `json:"trigger_item_id"`
+	TriggerItemID    string `json:"trigger_item_id"`   // empty → daily-closet mode
 	TriggerItemType  string `json:"trigger_item_type"` // "catalog" | "closet"
 	ContextFilter    string `json:"context_filter"`    // "all" | "casual" | "smart_casual" | "date_night" | "weekend"
 	Limit            int    `json:"limit"`
@@ -55,6 +72,7 @@ type Outfit struct {
 type RecommendMeta struct {
 	TriggerItemID            string `json:"trigger_item_id"`
 	ClosetItemsConsidered    int    `json:"closet_items_considered"`
+	WishlistItemsConsidered  int    `json:"wishlist_items_considered"`
 	CombinationsEvaluated    int    `json:"combinations_evaluated"`
 	CombinationsAfterFilters int    `json:"combinations_after_filters"`
 	Returned                 int    `json:"returned"`
@@ -69,9 +87,16 @@ type RecommendResult struct {
 
 // combo holds a set of wardrobe items forming one candidate outfit.
 type combo struct {
-	items []models.WardrobeItem
-	score int
-	bd    ScoreBreakdown
+	items     []models.WardrobeItem
+	score     int
+	bd        ScoreBreakdown
+	triggerID primitive.ObjectID
+}
+
+// ComboKeyForItems computes the wear-history key (top+bottom pair) for a set
+// of wardrobe items. Exported for the wear-log handler.
+func ComboKeyForItems(items []models.WardrobeItem) string {
+	return comboKey(combo{items: items})
 }
 
 // comboKey returns a deduplication key based on the top+bottom pair.
@@ -91,8 +116,28 @@ func comboKey(c combo) string {
 	return top + "|" + bottom
 }
 
-// fetchTriggerAsWardrobeItem loads either a catalog product or closet item and normalises
-// it to WardrobeItem so the engine can treat both uniformly.
+// productToWardrobeItem normalises a catalog product to a WardrobeItem so the
+// engine can treat closet, wishlist and catalog items uniformly.
+func productToWardrobeItem(p models.Product) models.WardrobeItem {
+	image := ""
+	if len(p.Images) > 0 {
+		image = p.Images[0]
+	}
+	return models.WardrobeItem{
+		ID:               primitive.NewObjectID(), // synthetic — used only for slot exclusion / dedup
+		Name:             p.Name,
+		Category:         p.Category,
+		Brand:            p.Brand,
+		Price:            p.Price,
+		Image:            image,
+		Identifiers:      p.Identifiers,
+		Owned:            false,
+		CatalogProductID: p.ID,
+	}
+}
+
+// fetchTriggerAsWardrobeItem loads either a catalog product or closet item and
+// normalises it to WardrobeItem.
 func fetchTriggerAsWardrobeItem(ctx context.Context, db *mongo.Database, req RecommendRequest) (models.WardrobeItem, error) {
 	if req.TriggerItemType == "catalog" {
 		col := db.Collection("products")
@@ -100,19 +145,7 @@ func fetchTriggerAsWardrobeItem(ctx context.Context, db *mongo.Database, req Rec
 		if err := col.FindOne(ctx, bson.M{"_id": req.TriggerItemID}).Decode(&p); err != nil {
 			return models.WardrobeItem{}, fmt.Errorf("catalog item not found: %w", err)
 		}
-		image := ""
-		if len(p.Images) > 0 {
-			image = p.Images[0]
-		}
-		return models.WardrobeItem{
-			ID:          primitive.NewObjectID(), // synthetic — used only for slot exclusion
-			Name:        p.Name,
-			Category:    p.Category,
-			Brand:       p.Brand,
-			Price:       p.Price,
-			Image:       image,
-			Identifiers: p.Identifiers,
-		}, nil
+		return productToWardrobeItem(p), nil
 	}
 
 	// closet item
@@ -129,15 +162,12 @@ func fetchTriggerAsWardrobeItem(ctx context.Context, db *mongo.Database, req Rec
 	if err := col.FindOne(ctx, bson.M{"_id": itemObjID, "userId": userObjID}).Decode(&item); err != nil {
 		return models.WardrobeItem{}, fmt.Errorf("closet item not found: %w", err)
 	}
+	item.Owned = true
 	return item, nil
 }
 
 // fetchClosetItems loads all active wardrobe items for the user.
-func fetchClosetItems(ctx context.Context, db *mongo.Database, userID string) ([]models.WardrobeItem, error) {
-	userObjID, err := primitive.ObjectIDFromHex(userID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid user id")
-	}
+func fetchClosetItems(ctx context.Context, db *mongo.Database, userObjID primitive.ObjectID) ([]models.WardrobeItem, error) {
 	col := db.Collection("wardrobeItems")
 	cursor, err := col.Find(ctx, bson.M{"userId": userObjID, "isActive": true})
 	if err != nil {
@@ -148,17 +178,50 @@ func fetchClosetItems(ctx context.Context, db *mongo.Database, userID string) ([
 	if err := cursor.All(ctx, &items); err != nil {
 		return nil, err
 	}
+	for i := range items {
+		items[i].Owned = true
+	}
 	return items, nil
 }
 
-// groupBySlot partitions closet items by outfit slot, excluding the trigger item.
-func groupBySlot(items []models.WardrobeItem, triggerID primitive.ObjectID) map[string][]models.WardrobeItem {
+// fetchWishlistItems loads the user's wishlisted catalog products as
+// engine-normalised wardrobe items (owned = false).
+func fetchWishlistItems(ctx context.Context, db *mongo.Database, userObjID primitive.ObjectID) ([]models.WardrobeItem, error) {
+	var user models.User
+	if err := db.Collection("users").FindOne(ctx, bson.M{"_id": userObjID}).Decode(&user); err != nil {
+		return nil, err
+	}
+	if len(user.Wishlist) == 0 {
+		return nil, nil
+	}
+	cursor, err := db.Collection("products").Find(ctx, bson.M{"_id": bson.M{"$in": user.Wishlist}, "isActive": true})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	var products []models.Product
+	if err := cursor.All(ctx, &products); err != nil {
+		return nil, err
+	}
+	items := make([]models.WardrobeItem, 0, len(products))
+	for _, p := range products {
+		items = append(items, productToWardrobeItem(p))
+	}
+	return items, nil
+}
+
+// groupBySlot partitions candidate items by outfit slot, excluding the trigger item.
+func groupBySlot(items []models.WardrobeItem, trigger models.WardrobeItem) map[string][]models.WardrobeItem {
 	groups := map[string][]models.WardrobeItem{
 		"top": {}, "bottom": {}, "full_body": {},
 		"outerwear": {}, "footwear": {}, "accessory": {},
 	}
 	for _, item := range items {
-		if item.ID == triggerID {
+		if item.ID == trigger.ID {
+			continue
+		}
+		// A wishlisted copy of the trigger product is still the trigger.
+		if item.CatalogProductID != "" && item.CatalogProductID == trigger.CatalogProductID {
 			continue
 		}
 		slot := outfitSlot(item.Category)
@@ -177,9 +240,10 @@ func takeN(items []models.WardrobeItem, n int) []models.WardrobeItem {
 	return items[:n]
 }
 
-// generateCombinations builds candidate outfit combos from the trigger and closet groups.
+// generateCombinations builds candidate outfit combos from the trigger and
+// slot groups, scoring each (base score + §4.2 modifiers).
 // Returns the combos and the total number of combinations evaluated.
-func generateCombinations(trigger models.WardrobeItem, groups map[string][]models.WardrobeItem, contextFilter string) ([]combo, int) {
+func generateCombinations(trigger models.WardrobeItem, groups map[string][]models.WardrobeItem, mc modifierContext) ([]combo, int) {
 	triggerSlot := outfitSlot(trigger.Category)
 	evaluated := 0
 
@@ -221,8 +285,8 @@ func generateCombinations(trigger models.WardrobeItem, groups map[string][]model
 		for _, rc := range requiredComplements {
 			baseSets = append(baseSets, []models.WardrobeItem{trigger, rc})
 		}
-		// If no complement found in closet, still produce a trigger-only base so
-		// shop-to-complete can fill the gap.
+		// If no complement found in closet or wishlist, still produce a
+		// trigger-only base so shop-to-complete can fill the gap.
 		if len(requiredComplements) == 0 {
 			baseSets = append(baseSets, []models.WardrobeItem{trigger})
 		}
@@ -232,8 +296,10 @@ func generateCombinations(trigger models.WardrobeItem, groups map[string][]model
 
 	score := func(set []models.WardrobeItem) combo {
 		evaluated++
-		s, bd := ScoreOutfit(set, contextFilter)
-		return combo{items: set, score: s, bd: bd}
+		base, bd := ScoreOutfit(set)
+		c := combo{items: set, bd: bd, triggerID: trigger.ID}
+		c.score = applyModifiers(base, c, mc)
+		return c
 	}
 
 	for _, base := range baseSets {
@@ -378,29 +444,81 @@ func findShopItem(ctx context.Context, db *mongo.Database, slot, contextFilter s
 	}
 }
 
+// dailyTriggers picks pseudo-trigger items for daily-closet mode: the user's
+// owned tops and full-body pieces, capped to bound the search.
+func dailyTriggers(closetItems []models.WardrobeItem) []models.WardrobeItem {
+	var triggers []models.WardrobeItem
+	for _, item := range closetItems {
+		slot := outfitSlot(item.Category)
+		if slot == "top" || slot == "full_body" {
+			triggers = append(triggers, item)
+		}
+		if len(triggers) >= maxDailyTriggers {
+			break
+		}
+	}
+	return triggers
+}
+
 // GenerateOutfits is the top-level entry point for the recommendation engine.
+// With a trigger item it powers the PDP / cart flows; with an empty
+// TriggerItemID it runs in daily-closet mode, generating outfits from the
+// user's whole Kloset + wishlist.
 func GenerateOutfits(ctx context.Context, db *mongo.Database, req RecommendRequest) (RecommendResult, error) {
 	start := time.Now()
 
-	if req.Limit <= 0 || req.Limit > 10 {
-		req.Limit = 8
+	maxResults := maxOutfitResults()
+	if req.Limit <= 0 || req.Limit > maxResults {
+		req.Limit = maxResults
 	}
 	if req.ContextFilter == "" {
 		req.ContextFilter = "all"
 	}
 
-	trigger, err := fetchTriggerAsWardrobeItem(ctx, db, req)
+	userObjID, err := primitive.ObjectIDFromHex(req.UserID)
+	if err != nil {
+		return RecommendResult{}, fmt.Errorf("invalid user id")
+	}
+
+	// Candidate pool: the user's Kloset + wishlisted catalog products.
+	closetItems, err := fetchClosetItems(ctx, db, userObjID)
 	if err != nil {
 		return RecommendResult{}, err
 	}
-
-	closetItems, err := fetchClosetItems(ctx, db, req.UserID)
+	wishlistItems, err := fetchWishlistItems(ctx, db, userObjID)
 	if err != nil {
 		return RecommendResult{}, err
 	}
+	pool := append(append([]models.WardrobeItem{}, closetItems...), wishlistItems...)
 
-	groups := groupBySlot(closetItems, trigger.ID)
-	combos, evaluated := generateCombinations(trigger, groups, req.ContextFilter)
+	mc := modifierContext{
+		contextFilter:    req.ContextFilter,
+		fittedProductIDs: fetchFittedProductIDs(ctx, db, userObjID),
+		wornComboKeys:    fetchWornComboKeys(ctx, db, userObjID),
+	}
+
+	var triggers []models.WardrobeItem
+	if req.TriggerItemID == "" {
+		triggers = dailyTriggers(closetItems)
+		if len(triggers) == 0 {
+			triggers = dailyTriggers(wishlistItems)
+		}
+	} else {
+		trigger, err := fetchTriggerAsWardrobeItem(ctx, db, req)
+		if err != nil {
+			return RecommendResult{}, err
+		}
+		triggers = []models.WardrobeItem{trigger}
+	}
+
+	var combos []combo
+	evaluated := 0
+	for _, trigger := range triggers {
+		groups := groupBySlot(pool, trigger)
+		cs, ev := generateCombinations(trigger, groups, mc)
+		combos = append(combos, cs...)
+		evaluated += ev
+	}
 
 	afterFilter := len(combos)
 	combos = deduplicate(combos)
@@ -412,7 +530,7 @@ func GenerateOutfits(ctx context.Context, db *mongo.Database, req RecommendReque
 		combos = combos[:req.Limit]
 	}
 
-	triggerSlot := outfitSlot(trigger.Category)
+	singleTrigger := req.TriggerItemID != ""
 
 	outfits := make([]Outfit, 0, len(combos))
 	for rank, c := range combos {
@@ -420,14 +538,18 @@ func GenerateOutfits(ctx context.Context, db *mongo.Database, req RecommendReque
 		outfitItems := make([]OutfitItem, 0, len(c.items))
 
 		for _, item := range c.items {
+			itemID := item.ID.Hex()
+			if item.CatalogProductID != "" {
+				itemID = item.CatalogProductID
+			}
 			outfitItems = append(outfitItems, OutfitItem{
-				ItemID:      item.ID.Hex(),
+				ItemID:      itemID,
 				Name:        item.Name,
 				Brand:       item.Brand,
 				Category:    item.Category,
 				ImageURL:    item.Image,
-				IsTrigger:   item.ID == trigger.ID,
-				Owned:       true,
+				IsTrigger:   singleTrigger && item.ID == c.triggerID,
+				Owned:       item.Owned,
 				Price:       item.Price,
 				Identifiers: item.Identifiers,
 			})
@@ -436,20 +558,21 @@ func GenerateOutfits(ctx context.Context, db *mongo.Database, req RecommendReque
 
 		var missingItems []OutfitItem
 		if req.IncludeShopItems {
-			if triggerSlot != "full_body" {
+			comboTrigger := c.items[0]
+			if !presentSlots["full_body"] {
 				if !presentSlots["top"] {
-					if si := findShopItem(ctx, db, "top", req.ContextFilter, trigger); si != nil {
+					if si := findShopItem(ctx, db, "top", req.ContextFilter, comboTrigger); si != nil {
 						missingItems = append(missingItems, *si)
 					}
 				}
 				if !presentSlots["bottom"] {
-					if si := findShopItem(ctx, db, "bottom", req.ContextFilter, trigger); si != nil {
+					if si := findShopItem(ctx, db, "bottom", req.ContextFilter, comboTrigger); si != nil {
 						missingItems = append(missingItems, *si)
 					}
 				}
 			}
 			if !presentSlots["footwear"] {
-				if si := findShopItem(ctx, db, "footwear", req.ContextFilter, trigger); si != nil {
+				if si := findShopItem(ctx, db, "footwear", req.ContextFilter, comboTrigger); si != nil {
 					missingItems = append(missingItems, *si)
 				}
 			}
@@ -473,6 +596,7 @@ func GenerateOutfits(ctx context.Context, db *mongo.Database, req RecommendReque
 		Meta: RecommendMeta{
 			TriggerItemID:            req.TriggerItemID,
 			ClosetItemsConsidered:    len(closetItems),
+			WishlistItemsConsidered:  len(wishlistItems),
 			CombinationsEvaluated:    evaluated,
 			CombinationsAfterFilters: afterFilter,
 			Returned:                 len(outfits),

@@ -23,6 +23,13 @@ type WardrobeItem struct {
 	Condition    string             `bson:"condition" json:"condition"` // new, like-new, good, fair
 	Notes        string             `bson:"notes" json:"notes"`
 	Identifiers  ItemIdentifiers    `bson:"identifiers" json:"identifiers"`
+
+	// Engine-transient provenance fields set by the recommendation engine — never persisted.
+	// Owned is true for items in the user's Kloset, false for wishlist/catalog items.
+	// CatalogProductID carries the products-collection ID when the item is not a wardrobe document.
+	Owned            bool   `bson:"-" json:"-"`
+	CatalogProductID string `bson:"-" json:"-"`
+
 	IsActive     bool               `bson:"isActive" json:"isActive"`
 	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
 	UpdatedAt    time.Time          `bson:"updatedAt" json:"updatedAt"`

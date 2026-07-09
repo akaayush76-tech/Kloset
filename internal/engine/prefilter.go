@@ -37,9 +37,29 @@ func formalityDistance(a, b string) bool {
 	return diff >= 2 // casual + formal = blocked; smart_casual bridges both
 }
 
+// ethnicClash implements BLOCK-03: ethnic items cannot mix with Western items
+// unless both are tagged fusion.
+func ethnicClash(a, b models.ItemIdentifiers) bool {
+	isEthnic := func(id models.ItemIdentifiers) bool { return id.Style == "ethnic" }
+	isFusion := func(id models.ItemIdentifiers) bool { return id.Style == "fusion" }
+	if isEthnic(a) && !isEthnic(b) {
+		return !isFusion(b)
+	}
+	if isEthnic(b) && !isEthnic(a) {
+		return !isFusion(a)
+	}
+	return false
+}
+
+// boldPattern reports whether a pattern counts as bold for BLOCK-05.
+// Solid (or untagged) items are never bold.
+func boldPattern(pattern string) bool {
+	return pattern != "" && pattern != "solid"
+}
+
 // seasonClash returns true when two non-"all" seasons are polar opposites.
 func seasonClash(a, b string) bool {
-	if a == "all" || b == "all" {
+	if a == "" || b == "" || a == "all" || b == "all" {
 		return false
 	}
 	opposite := map[string]string{
@@ -73,8 +93,18 @@ func PassesPreFilter(trigger, candidate models.WardrobeItem) bool {
 		return false
 	}
 
-	// Formality extreme clash (casual ↔ formal)
+	// Formality extreme clash (casual ↔ formal) — BLOCK-01
 	if formalityDistance(trigger.Identifiers.Formality, candidate.Identifiers.Formality) {
+		return false
+	}
+
+	// Ethnic ↔ Western mixing — BLOCK-03
+	if ethnicClash(trigger.Identifiers, candidate.Identifiers) {
+		return false
+	}
+
+	// Two bold patterns in one outfit — BLOCK-05 (solid + pattern is fine)
+	if boldPattern(trigger.Identifiers.Pattern) && boldPattern(candidate.Identifiers.Pattern) {
 		return false
 	}
 

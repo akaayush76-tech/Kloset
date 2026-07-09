@@ -101,7 +101,7 @@ func RegisterHandler(c *gin.Context) {
 			PreferredColors: []string{},
 			PreferredSizes:  []string{},
 		},
-		Wishlist:      []primitive.ObjectID{},
+		Wishlist:      []string{},
 		Cart:          []models.CartItem{},
 		Orders:        []primitive.ObjectID{},
 		Reviews:       []primitive.ObjectID{},

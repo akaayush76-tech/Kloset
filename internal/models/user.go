@@ -27,7 +27,7 @@ type User struct {
 
 	// Nested arrays for relationships
 	Preferences   UserPreferences      `bson:"preferences" json:"preferences"`
-	Wishlist      []primitive.ObjectID `bson:"wishlist" json:"wishlist"`
+	Wishlist      []string             `bson:"wishlist" json:"wishlist"` // product IDs (products collection uses string IDs)
 	Cart          []CartItem           `bson:"cart" json:"cart"`
 	Orders        []primitive.ObjectID `bson:"orders" json:"orders"`
 	Reviews       []primitive.ObjectID `bson:"reviews" json:"reviews"`

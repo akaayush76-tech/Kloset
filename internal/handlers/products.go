@@ -103,12 +103,6 @@ func GetProductsHandler(c *gin.Context) {
 func GetProductHandler(c *gin.Context) {
 	productID := c.Param("id")
 
-	objID, err := primitive.ObjectIDFromHex(productID)
-	if err != nil {
-		utils.HTTPErrorHandler(c, http.StatusBadRequest, "Invalid product ID", err)
-		return
-	}
-
 	db := config.GetDB()
 	collection := db.Collection("products")
 
@@ -116,7 +110,7 @@ func GetProductHandler(c *gin.Context) {
 	defer cancel()
 
 	var product models.Product
-	err = collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&product)
+	err := collection.FindOne(ctx, bson.M{"_id": productID}).Decode(&product)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			utils.HTTPErrorHandler(c, http.StatusNotFound, "Product not found", nil)
@@ -190,12 +184,6 @@ func GetFeaturedHandler(c *gin.Context) {
 func GetRelatedHandler(c *gin.Context) {
 	productID := c.Param("id")
 
-	objID, err := primitive.ObjectIDFromHex(productID)
-	if err != nil {
-		utils.HTTPErrorHandler(c, http.StatusBadRequest, "Invalid product ID", err)
-		return
-	}
-
 	db := config.GetDB()
 	collection := db.Collection("products")
 
@@ -204,7 +192,7 @@ func GetRelatedHandler(c *gin.Context) {
 
 	// Get the product first
 	var product models.Product
-	err = collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&product)
+	err := collection.FindOne(ctx, bson.M{"_id": productID}).Decode(&product)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			utils.HTTPErrorHandler(c, http.StatusNotFound, "Product not found", nil)
@@ -221,7 +209,7 @@ func GetRelatedHandler(c *gin.Context) {
 
 	cursor, err := collection.Find(ctx, bson.M{
 		"category": product.Category,
-		"_id":      bson.M{"$ne": objID},
+		"_id":      bson.M{"$ne": productID},
 		"isActive": true,
 	}, opts)
 	if err != nil {
